@@ -8,6 +8,9 @@
 *.so
 *.dylib
 
+# direnv
+.direnv/
+
 # Test binary, built with `go test -c`
 *.test
 
@@ -22,6 +25,7 @@ go.work
 
 build/vault/plugins
 .vscode
+vault-plugin-secrets-nats
 
 
 # Ignore DevSpace cache and log folder
