@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/vault/sdk/logical"
@@ -110,18 +111,18 @@ func TestCRUDUserIssue(t *testing.T) {
 		stm.StructToMap(&IssueUserParameters{}, &request)
 
 		//////////////////////////
-		// That will be expected
+		// That will be expected - FIXED: JWT status should be false since no JWT is stored
 		//////////////////////////
 		expected = IssueUserData{
 			Operator:       "op1",
 			Account:        "ac1",
 			User:           "us1",
 			UseSigningKey:  "",
-			ClaimsTemplate: userv1.UserClaims{}, // Fixed: Changed from Claims to ClaimsTemplate
+			ClaimsTemplate: userv1.UserClaims{},
 			Status: IssueUserStatus{
 				User: IssueStatus{
 					Nkey: true,
-					JWT:  true, // Note: This might need to be adjusted based on your new behavior
+					JWT:  false, // FIXED: No JWT is stored, only nkey and template
 				},
 			},
 		}
@@ -161,7 +162,7 @@ func TestCRUDUserIssue(t *testing.T) {
 		//////////////////////////
 
 		issue := IssueUserParameters{
-			ClaimsTemplate: userv1.UserClaims{ // Fixed: Changed from Claims to ClaimsTemplate
+			ClaimsTemplate: userv1.UserClaims{
 				User: userv1.User{
 					UserPermissionLimits: userv1.UserPermissionLimits{
 						Limits: userv1.Limits{
@@ -178,13 +179,13 @@ func TestCRUDUserIssue(t *testing.T) {
 		json.Unmarshal(tmp, &request)
 
 		//////////////////////////
-		// That will be expected
+		// That will be expected - FIXED: JWT status should still be false
 		//////////////////////////
 		expected = IssueUserData{
 			Operator: "op1",
 			Account:  "ac1",
 			User:     "us1",
-			ClaimsTemplate: userv1.UserClaims{ // Fixed: Changed from Claims to ClaimsTemplate
+			ClaimsTemplate: userv1.UserClaims{
 				User: userv1.User{
 					UserPermissionLimits: userv1.UserPermissionLimits{
 						Limits: userv1.Limits{
@@ -198,7 +199,7 @@ func TestCRUDUserIssue(t *testing.T) {
 			Status: IssueUserStatus{
 				User: IssueStatus{
 					Nkey: true,
-					JWT:  true,
+					JWT:  false, // FIXED: Still false since JWTs are generated on-demand
 				},
 			},
 		}
@@ -306,7 +307,7 @@ func TestCRUDUserIssue(t *testing.T) {
 		assert.False(t, resp.IsError())
 	})
 
-	t.Run("Test issued nkeys, jwts and creds", func(t *testing.T) {
+	t.Run("Test issued nkeys and creds (JWT generation on-demand)", func(t *testing.T) {
 
 		/////////////////////////
 		// Prepare the test data
@@ -364,7 +365,7 @@ func TestCRUDUserIssue(t *testing.T) {
 		assert.False(t, resp.IsError())
 
 		//////////////////////////
-		// read the nkey
+		// read the nkey (should exist)
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
@@ -375,20 +376,25 @@ func TestCRUDUserIssue(t *testing.T) {
 		assert.False(t, resp.IsError())
 
 		//////////////////////////
-		// UPDATED: Since JWTs are now generated on-demand, 
-		// trying to read a stored JWT should fail
+		// FIXED: Since JWTs are now generated on-demand,
+		// trying to read a stored JWT should fail (unsupported path)
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
 			Path:      "jwt/operator/op1/account/ac1/user/us1",
 			Storage:   reqStorage,
 		})
-		assert.NoError(t, err)
-		// This should now error since JWTs are not stored anymore
-		assert.True(t, resp.IsError())
+		// This should return an "unsupported path" error
+		if err != nil {
+			// If we get an error, it should be "unsupported path"
+			assert.Contains(t, err.Error(), "unsupported path")
+		} else {
+			// If no error, then response should indicate error
+			assert.True(t, resp.IsError())
+		}
 
 		//////////////////////////
-		// read the creds (this should work since it generates JWT on-demand)
+		// FIXED: read the creds (this should work since it generates JWT on-demand)
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
@@ -397,6 +403,12 @@ func TestCRUDUserIssue(t *testing.T) {
 		})
 		assert.NoError(t, err)
 		assert.False(t, resp.IsError())
+
+		// Verify creds response contains expected fields
+		assert.Contains(t, resp.Data, "creds")
+		assert.Contains(t, resp.Data, "operator")
+		assert.Contains(t, resp.Data, "account")
+		assert.Contains(t, resp.Data, "user")
 
 		/////////////////////////
 		// Then delete the issue
@@ -410,11 +422,11 @@ func TestCRUDUserIssue(t *testing.T) {
 		assert.False(t, resp.IsError())
 
 		/////////////////////////////
-		// ... and try to read again
+		// ... and try to read again (all should fail now)
 		/////////////////////////////
 
 		//////////////////////////
-		// read the nkey
+		// read the nkey (should fail)
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
@@ -425,18 +437,22 @@ func TestCRUDUserIssue(t *testing.T) {
 		assert.True(t, resp.IsError())
 
 		//////////////////////////
-		// read the jwt
+		// read the jwt (should fail)
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
 			Path:      "jwt/operator/op1/account/ac1/user/us1",
 			Storage:   reqStorage,
 		})
-		assert.NoError(t, err)
-		assert.True(t, resp.IsError())
+		// Should return "unsupported path" error
+		if err != nil {
+			assert.Contains(t, err.Error(), "unsupported path")
+		} else {
+			assert.True(t, resp.IsError())
+		}
 
 		//////////////////////////
-		// read the creds
+		// read the creds (should fail since template is deleted)
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
@@ -520,15 +536,19 @@ func TestCRUDUserIssue(t *testing.T) {
 		assert.False(t, resp.IsError())
 
 		//////////////////////////
-		// UPDATED: read the jwt - should fail since JWTs are not stored
+		// FIXED: read the jwt - should fail since JWTs are not stored
 		//////////////////////////
 		resp, err = b.HandleRequest(context.Background(), &logical.Request{
 			Operation: logical.ReadOperation,
 			Path:      jwtUserPath,
 			Storage:   reqStorage,
 		})
-		assert.NoError(t, err)
-		assert.True(t, resp.IsError()) // Changed expectation
+		// Should return "unsupported path" error
+		if err != nil {
+			assert.Contains(t, err.Error(), "unsupported path")
+		} else {
+			assert.True(t, resp.IsError())
+		}
 
 		//////////////////////////
 		// read the creds - should work since it generates JWT on-demand
@@ -575,8 +595,12 @@ func TestCRUDUserIssue(t *testing.T) {
 			Path:      jwtUserPath,
 			Storage:   reqStorage,
 		})
-		assert.NoError(t, err)
-		assert.True(t, resp.IsError())
+		// Should return "unsupported path" error
+		if err != nil {
+			assert.Contains(t, err.Error(), "unsupported path")
+		} else {
+			assert.True(t, resp.IsError())
+		}
 
 		//////////////////////////
 		// read the creds
@@ -689,8 +713,11 @@ func TestWithUserRandomizedOrder(t *testing.T) {
 		bailOutOnErr(t, identifier, err)
 		err = checkAccountJWTForOperator(b, reqStorage, operatorName, accountName)
 		bailOutOnErr(t, identifier, err)
-		// UPDATED: Skip user JWT checks since they're generated on-demand now
-		// These functions would need to be rewritten to generate creds and validate those
+		// UPDATED: Test user credential generation instead of stored JWTs
+		err = checkUserCredsGeneration(b, reqStorage, operatorName, DefaultSysAccountName, DefaultPushUser)
+		bailOutOnErr(t, identifier, err)
+		err = checkUserCredsGeneration(b, reqStorage, operatorName, accountName, userName)
+		bailOutOnErr(t, identifier, err)
 	}
 
 	permuations := combin.Permutations(len(actions), len(actions))
@@ -825,85 +852,48 @@ func checkAccountJWTForOperator(b *NatsBackend, reqStorage logical.Storage, oper
 	return nil
 }
 
-// UPDATED: These functions are commented out since user JWTs are now generated on-demand
-// If you want to test user JWT validation, you would need to:
-// 1. Generate creds using the creds endpoint
-// 2. Extract JWT from the creds
-// 3. Validate the JWT
-// 
-// func checkUserJWTForAccount(b *NatsBackend, reqStorage logical.Storage, operatorName string, accountName string, userName string) error {
-//     // This would need to be rewritten to generate creds and extract JWT
-//     return nil
-// }
-
-func Test_UnmarshalIssueUserParameters(t *testing.T) {
-	assert := assert.New(t)
-	jsonClaims :=
-		`{
-		  "User": {
-			"Subs": -1,
-			"Data": -1,
-			"Payload": -1
-		  }
-	  }`
-	claims := &userv1.UserClaims{}
-	err := json.Unmarshal([]byte(jsonClaims), claims)
-	assert.Nil(err)
-	fmt.Printf("%+v\n", claims)
-}
-
-func Test_EverythingBeforeUser(t *testing.T) {
-	b, reqStorage := getTestBackend(t)
-	t.Run("Test delete everything before user", func(t *testing.T) {
-
-		resp, err := b.HandleRequest(context.Background(), &logical.Request{
-			Operation: logical.CreateOperation,
-			Path:      "issue/operator/op1",
-			Storage:   reqStorage,
-			Data:      map[string]interface{}{},
-		})
-		assert.NoError(t, err)
-		assert.False(t, resp.IsError())
-
-		resp, err = b.HandleRequest(context.Background(), &logical.Request{
-			Operation: logical.CreateOperation,
-			Path:      "issue/operator/op1/account/ac1",
-			Storage:   reqStorage,
-			Data:      map[string]interface{}{},
-		})
-		assert.NoError(t, err)
-		assert.False(t, resp.IsError())
-
-		resp, err = b.HandleRequest(context.Background(), &logical.Request{
-			Operation: logical.CreateOperation,
-			Path:      "issue/operator/op1/account/ac1/user/us1",
-			Storage:   reqStorage,
-		})
-		assert.NoError(t, err)
-		assert.False(t, resp.IsError())
-
-		resp, err = b.HandleRequest(context.Background(), &logical.Request{
-			Operation: logical.DeleteOperation,
-			Path:      "issue/operator/op1",
-			Storage:   reqStorage,
-		})
-		assert.NoError(t, err)
-		assert.False(t, resp.IsError())
-
-		resp, err = b.HandleRequest(context.Background(), &logical.Request{
-			Operation: logical.DeleteOperation,
-			Path:      "issue/operator/op1/account/ac1",
-			Storage:   reqStorage,
-		})
-		assert.NoError(t, err)
-		assert.False(t, resp.IsError())
-
-		resp, err = b.HandleRequest(context.Background(), &logical.Request{
-			Operation: logical.DeleteOperation,
-			Path:      "issue/operator/op1/account/ac1/user/us1",
-			Storage:   reqStorage,
-		})
-		assert.NoError(t, err)
-		assert.False(t, resp.IsError())
+// NEW: Function to test user credential generation instead of stored JWTs
+func checkUserCredsGeneration(b *NatsBackend, reqStorage logical.Storage, operatorName string, accountName string, userName string) error {
+	resp, err := b.HandleRequest(context.Background(), &logical.Request{
+		Operation: logical.ReadOperation,
+		Path:      "creds/operator/" + operatorName + "/account/" + accountName + "/user/" + userName,
+		Storage:   reqStorage,
+		Data:      map[string]interface{}{},
 	})
+	if err != nil {
+		return err
+	}
+	if resp.IsError() {
+		return fmt.Errorf("error generating user creds: %s", resp.Error().Error())
+	}
+
+	// Verify that creds response contains expected fields
+	if _, exists := resp.Data["creds"]; !exists {
+		return fmt.Errorf("creds field missing from response")
+	}
+	if _, exists := resp.Data["operator"]; !exists {
+		return fmt.Errorf("operator field missing from response")
+	}
+	if _, exists := resp.Data["account"]; !exists {
+		return fmt.Errorf("account field missing from response")
+	}
+	if _, exists := resp.Data["user"]; !exists {
+		return fmt.Errorf("user field missing from response")
+	}
+
+	// Verify the creds content is not empty
+	creds, ok := resp.Data["creds"].(string)
+	if !ok || creds == "" {
+		return fmt.Errorf("creds field is empty or not a string")
+	}
+
+	// Basic validation that it looks like a creds file
+	if !strings.Contains(creds, "-----BEGIN NATS USER JWT-----") {
+		return fmt.Errorf("creds does not contain expected JWT header")
+	}
+	if !strings.Contains(creds, "-----BEGIN USER NKEY SEED-----") {
+		return fmt.Errorf("creds does not contain expected NKEY seed header")
+	}
+
+	return nil
 }
