@@ -1,0 +1,23 @@
+{
+    "claimsTemplate": {
+        "user": {
+            "data": -1,
+            "payload": -1,
+            "subs": -1,
+            "locale": "",
+            "pub": {
+                "allow": [
+                    "to_lobby_{{lobby_id}}.from_{{user_id}}"
+                ]
+            },
+            "resp": null,
+            "sub": {
+                "allow": [
+                    "to_lobby_{{lobby_id}}."
+                ]
+            },
+            "tags": ["E"]
+        }
+    },
+    "expirationS": 3600
+}

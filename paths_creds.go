@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/vault/sdk/logical"
 )
 
-// JWTStorage represents a Creds stored in the backend
+// CredsStorage represents a Creds stored in the backend
 type CredsStorage struct {
 	Creds string `json:"creds"`
 }
@@ -18,12 +18,12 @@ type CredsParameters struct {
 	Operator string `json:"operator,omitempty"`
 	Account  string `json:"account,omitempty"`
 	User     string `json:"user,omitempty"`
-	CredsStorage
+	Creds    string `json:"creds,omitempty"`
 }
 
 // CredsData represents the the data returned by a Creds operation
 type CredsData struct {
-	CredsStorage
+	Creds string `json:"creds"`
 }
 
 func pathCreds(b *NatsBackend) []*framework.Path {
@@ -42,7 +42,7 @@ func deleteCreds(ctx context.Context, storage logical.Storage, path string) erro
 
 func createResponseCredsData(creds *CredsStorage) (*logical.Response, error) {
 	d := &CredsData{
-		CredsStorage: *creds,
+		Creds: creds.Creds,
 	}
 
 	rval := map[string]interface{}{}
@@ -69,7 +69,7 @@ func addCreds(ctx context.Context, storage logical.Storage, path string, params 
 
 	creds.Creds = params.Creds
 
-	// store the nkey
+	// store the creds
 	err = storeInStorage(ctx, storage, path, creds)
 	if err != nil {
 		return err

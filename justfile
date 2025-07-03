@@ -85,25 +85,27 @@ enable-plugin: build
     
     echo "✅ Plugin enabled! Check with: vault secrets list"
 
-# Stop Vault
-stop-vault:
-    pkill vault || echo "No vault process found"
+# start vault, enable plugin and create demo user
+start:
+    @just stop
+    @just clean
+    @just start-vault
+    @just enable-plugin
+    @just login
+    @just create-demo
 
-# List enabled secrets engines
-list-secrets:
-    vault secrets list
+# Login to Vault with root token
+login:
+    vault login ${VAULT_TOKEN}   || echo "Already logged in or Vault not running"
+
+# Stop Vault and clean up
+stop:
+    pkill vault || echo "No vault process found"
+    @just clean
 
 # Run tests
 test:
-    go test ./...
-
-# Run tests with verbose output
-test-verbose:
     go test -v ./...
-
-# Check code with linter (if available)
-lint:
-    golangci-lint run || echo "golangci-lint not available"
 
 # Show plugin status and basic info
 status:
@@ -116,6 +118,16 @@ status:
     @echo "📦 Plugin Binary:"
     @ls -la vault-plugin-secrets-nats 2>/dev/null || echo "Plugin not built"
 
-# Clean everything (vault, plugin, artifacts)
-reset: stop-vault clean
-    echo "🧹 Everything cleaned up!"
+create-demo operator="demo-operator" account="demo-account" user="demo-user":
+    set -euo pipefail
+    echo "👑 Creating NATS operator: {{operator}}"
+    vault write nats-secrets/issue/operator/{{operator}} @example_data/operator.json
+    echo "🏢 Creating NATS account: {{account}} under operator: {{operator}}"
+    vault write nats-secrets/issue/operator/{{operator}}/account/{{account}} @example_data/account.json
+    echo "👤 Creating NATS user: {{user}} in account: {{account}}"
+    vault write nats-secrets/issue/operator/{{operator}}/account/{{account}}/user/{{user}} @example_data/user.json
+
+read-demo-user operator="demo-operator" account="demo-account" user="demo-user":
+    set -euo pipefail
+    echo "🔍 Reading NATS user with params: {{user}}"
+    vault read nats-secrets/creds/operator/{{operator}}/account/{{account}}/user/{{user}} parameters='{"lobby_id": "123", "user_id": "456"}'

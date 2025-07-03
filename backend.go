@@ -253,19 +253,8 @@ func (b *NatsBackend) periodicRefreshUserIssues(ctx context.Context, storage log
 			return err
 		}
 
-		jwtMissing := false
 		nkeyMissing := false
-		jwt, err := readUserJWT(ctx, storage, JWTParameters{
-			Operator: operator,
-			Account:  account,
-			User:     issueName,
-		})
-		if err != nil {
-			return err
-		}
-		if !issue.Status.User.JWT || jwt == nil {
-			jwtMissing = true
-		}
+		// No need to check if user jwt exists as we generate them on demand
 
 		nkey, err := readUserNkey(ctx, storage, NkeyParameters{
 			Operator: operator,
@@ -279,7 +268,7 @@ func (b *NatsBackend) periodicRefreshUserIssues(ctx context.Context, storage log
 			nkeyMissing = true
 		}
 
-		if jwtMissing || nkeyMissing {
+		if nkeyMissing {
 			if err := refreshUser(ctx, storage, issue); err != nil {
 				return err
 			}

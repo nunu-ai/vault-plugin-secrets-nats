@@ -215,6 +215,7 @@ func refreshAccountResolvers(ctx context.Context, storage logical.Storage, issue
 		return nil
 	}
 
+	// Check if push user template exists (since JWTs are now generated on-demand)
 	pushUser, err := readUserIssue(ctx, storage, IssueUserParameters{
 		Operator: issue.Operator,
 		Account:  DefaultSysAccountName,
@@ -224,7 +225,8 @@ func refreshAccountResolvers(ctx context.Context, storage logical.Storage, issue
 		return err
 	}
 	if pushUser != nil {
-		if pushUser.Status.User.JWT {
+		// Check if the user has required nkey (JWT will be generated on-demand when needed)
+		if pushUser.Status.User.Nkey {
 			accounts, err := listAccountIssues(ctx, storage, issue.Operator)
 			if err != nil {
 				return err
@@ -239,12 +241,10 @@ func refreshAccountResolvers(ctx context.Context, storage logical.Storage, issue
 				}
 			}
 		} else {
-			// todo warning push user does not exist
-			log.Warn().Str("operator", issue.Operator).Msg("cannot refresh account resolvers, push user has no JWT yet")
+			log.Warn().Str("operator", issue.Operator).Msg("cannot refresh account resolvers, push user has no nkey yet")
 		}
 	} else {
-		// todo warning does not exist
-		log.Warn().Str("operator", issue.Operator).Msg("cannot refresh account resolvers, push user does not exist")
+		log.Warn().Str("operator", issue.Operator).Msg("cannot refresh account resolvers, push user template does not exist")
 	}
 
 	return nil
@@ -687,7 +687,7 @@ func getIssueOperatorStatus(ctx context.Context, storage logical.Storage, issue 
 		status.SystemAccount.JWT = true
 	}
 
-	// sys account user status
+	// sys account user status - since JWTs are generated on-demand, check template and nkey
 	nkey, err = readUserNkey(ctx, storage, NkeyParameters{
 		Operator: issue.Operator,
 		Account:  DefaultSysAccountName,
@@ -696,14 +696,18 @@ func getIssueOperatorStatus(ctx context.Context, storage logical.Storage, issue 
 	if err == nil && nkey != nil {
 		status.SystemAccountUser.Nkey = true
 	}
-	jwt, err = readUserJWT(ctx, storage, JWTParameters{
+	
+	// Check if user template exists (since JWTs are generated on-demand)
+	userTemplate, err := readUserIssue(ctx, storage, IssueUserParameters{
 		Operator: issue.Operator,
 		Account:  DefaultSysAccountName,
 		User:     DefaultPushUser,
 	})
-	if err == nil && jwt != nil {
+	if err == nil && userTemplate != nil {
+		// User template exists, so JWT can be generated on-demand
 		status.SystemAccountUser.JWT = true
 	}
+	
 	return &status
 }
 

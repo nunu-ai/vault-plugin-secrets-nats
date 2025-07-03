@@ -655,18 +655,34 @@ func refreshAccountResolver(ctx context.Context, storage logical.Storage, issue 
 		return nil
 	}
 
-	// read system account user jwt
-	sysUserJWT, err := readUserJWT(ctx, storage, JWTParameters{
+	// Since JWTs are now generated on-demand, we need to generate the system user JWT
+	// Check if system user template exists first
+	sysUserIssue, err := readUserIssue(ctx, storage, IssueUserParameters{
 		Operator: issue.Operator,
 		Account:  DefaultSysAccountName,
 		User:     DefaultPushUser,
 	})
 	if err != nil {
 		return err
-	} else if sysUserJWT == nil {
+	} else if sysUserIssue == nil {
 		log.Warn().Str("operator", issue.Operator).
 			Str("account", issue.Account).
-			Msg("cannot sync account server: system account user jwt does not exist")
+			Msg("cannot sync account server: system account user template does not exist")
+		return nil
+	}
+
+	// Generate fresh system user JWT for connection
+	sysUserCreds, err := generateUserCreds(ctx, storage, UserCredsParameters{
+		Operator: issue.Operator,
+		Account:  DefaultSysAccountName,
+		User:     DefaultPushUser,
+	})
+	if err != nil {
+		return err
+	} else if sysUserCreds == nil {
+		log.Warn().Str("operator", issue.Operator).
+			Str("account", issue.Account).
+			Msg("cannot sync account server: failed to generate system user credentials")
 		return nil
 	}
 
@@ -690,8 +706,27 @@ func refreshAccountResolver(ctx context.Context, storage logical.Storage, issue 
 		return err
 	}
 
+	// Extract JWT from creds - we need just the JWT part, not the full creds format
+	// The generateUserCreds returns full creds, but we need to extract JWT for resolver
+	// Parse the creds to get the JWT token
+	credsLines := strings.Split(sysUserCreds.Creds, "\n")
+	var jwtToken string
+	for _, line := range credsLines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "eyJ") { // JWT tokens start with eyJ
+			jwtToken = line
+			break
+		}
+	}
+	if jwtToken == "" {
+		log.Error().Str("operator", issue.Operator).
+			Str("account", issue.Account).
+			Msg("cannot sync account server: failed to extract JWT from system user creds")
+		return nil
+	}
+
 	// connect to nats
-	resolver, err := resolver.NewResolver(op.Claims.AccountServerURL, []byte(sysUserJWT.JWT), sysUserKp)
+	resolver, err := resolver.NewResolver(op.Claims.AccountServerURL, []byte(jwtToken), sysUserKp)
 	if err != nil {
 		log.Warn().Str("operator", issue.Operator).
 			Str("account", issue.Account).

@@ -22,7 +22,6 @@ type JWTStorage struct {
 type JWTParameters struct {
 	Operator string `json:"operator,omitempty"`
 	Account  string `json:"account,omitempty"`
-	User     string `json:"user,omitempty"`
 	JWTStorage
 }
 
@@ -34,7 +33,6 @@ type JWTData struct {
 func pathJWT(b *NatsBackend) []*framework.Path {
 	paths := []*framework.Path{}
 	paths = append(paths, pathOperatorJWT(b)...)
-	paths = append(paths, pathUserJWT(b)...)
 	paths = append(paths, pathAccountJWT(b)...)
 	return paths
 }
