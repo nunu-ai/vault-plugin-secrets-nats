@@ -7,7 +7,7 @@
             "locale": "",
             "pub": {
                 "allow": [
-                    "to_lobby_{{lobby_id}}.from_{{user_id}}"
+                    "to_lobby_{{lobby_id}}.from_user_{{user_id}}"
                 ]
             },
             "resp": null,
