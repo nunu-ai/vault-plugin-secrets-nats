@@ -26,6 +26,7 @@ go.work
 build/vault/plugins
 .vscode
 vault-plugin-secrets-nats
+result
 
 
 # Ignore DevSpace cache and log folder
