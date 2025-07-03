@@ -10,19 +10,30 @@
     let
       forAllSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
     in {
-      devShells = forAllSystems (system:
+      packages = forAllSystems (system:
         let
           pkgs = import nixpkgs {
             inherit system;
             config.allowUnfree = true;
           };
-
-          pre-commit-check = pre-commit-hooks.lib.${system}.run {
+        in {
+          default = pkgs.buildGoModule {
+            pname = "vault-plugin-secrets-nats";
+            version = "1.7.0";
             src = ./.;
-            hooks = {
-              gofmt.enable = true;
-              goimports.enable = true;
-            };
+            vendorHash = null;
+            ldflags = [ "-s" "-w" ];
+
+            # Optional: specify the main package if it's not in the root
+            # subPackages = [ "cmd/vault-plugin-secrets-nats" ];
+          };
+        });
+
+      devShells = forAllSystems (system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            config.allowUnfree = true;
           };
         in {
           default = pkgs.mkShell {
@@ -36,7 +47,6 @@
             ];
 
             shellHook = ''
-              ${pre-commit-check.shellHook}
               export VAULT_ADDR='http://127.0.0.1:8200'
               export VAULT_TOKEN='root'
             '';
