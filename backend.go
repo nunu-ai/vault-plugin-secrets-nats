@@ -217,6 +217,11 @@ func (b *NatsBackend) periodicFunc(ctx context.Context, sys *logical.Request) er
 					})
 					if err != nil {
 						b.Logger().Info(err.Error())
+						continue
+					}
+					if accountIssue == nil {
+						b.Logger().Info(fmt.Sprintf("account issue for %s/%s does not exist", operator, account))
+						continue
 					}
 					if err = refreshAccountResolver(ctx, sys.Storage, accountIssue, AccountResolverActionPush); err != nil {
 						return err

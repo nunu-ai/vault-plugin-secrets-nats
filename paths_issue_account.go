@@ -732,7 +732,6 @@ func refreshAccountResolver(ctx context.Context, storage logical.Storage, issue 
 			Str("account", issue.Account).
 			Err(err).
 			Msg("cannot create conection to account server")
-		resolver.CloseConnection()
 		return nil
 	}
 	defer resolver.CloseConnection()
@@ -745,7 +744,6 @@ func refreshAccountResolver(ctx context.Context, storage logical.Storage, issue 
 				Str("account", issue.Account).
 				Err(err).
 				Msg("cannot sync account server (add)")
-			resolver.CloseConnection()
 			return nil
 		}
 	case action == AccountResolverActionDelete:
@@ -775,10 +773,10 @@ func refreshAccountResolver(ctx context.Context, storage logical.Storage, issue 
 		})
 		if err != nil {
 			return err
-		} else if accJWT == nil {
+		} else if accNkey == nil {
 			log.Warn().Str("operator", issue.Operator).
 				Str("account", issue.Account).
-				Msg("cannot sync account server: account neky does not exist")
+				Msg("cannot sync account server: account nkey does not exist")
 			return nil
 		}
 		kp, err = toNkeyData(accNkey)
@@ -799,7 +797,6 @@ func refreshAccountResolver(ctx context.Context, storage logical.Storage, issue 
 				Str("account", issue.Account).
 				Err(err).
 				Msg("cannot sync account server (delete)")
-			resolver.CloseConnection()
 			return nil
 		}
 	}
