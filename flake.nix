@@ -19,7 +19,7 @@
         in {
           default = pkgs.buildGoModule {
             pname = "vault-plugin-secrets-nats";
-            version = "1.7.0";
+            version = "1.7.1";
             src = ./.;
             vendorHash = null;
             ldflags = [ "-s" "-w" ];
