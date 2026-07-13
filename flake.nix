@@ -8,7 +8,7 @@
 
   outputs = { nixpkgs, pre-commit-hooks, ... }:
     let
-      forAllSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
+      forAllSystems = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ];
     in {
       packages = forAllSystems (system:
         let
@@ -22,6 +22,7 @@
             version = "1.7.1";
             src = ./.;
             vendorHash = null;
+            env.CGO_ENABLED = "0";
             ldflags = [ "-s" "-w" ];
 
             # Optional: specify the main package if it's not in the root
